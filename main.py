@@ -24,7 +24,7 @@ parser.add_argument('--rounds', type=int, default=150, metavar='N',
                     help='rounds of adversarial training (default: 150)')
 parser.add_argument('--g_pretrain_steps', type=int, default=5, metavar='N',
                     help='steps of pre-training of generators (default: 120)')
-parser.add_argument('--d_pretrain_steps', type=int, default=50, metavar='N',
+parser.add_argument('--d_pretrain_steps', type=int, default=20, metavar='N',
                     help='steps of pre-training of discriminators (default: 50)')
 parser.add_argument('--g_steps', type=int, default=1, metavar='N',
                     help='steps of generator updates in one round of adverarial training (default: 1)')
@@ -362,7 +362,6 @@ if __name__ == '__main__':
         dis_pretrain_eval_acc.append(dis_acc)
         print("eval loss: {:.5f}, eval acc: {:.3f}\n".format(dis_loss, dis_acc))
     print('#####################################################\n\n')
-    os._exit(0)
 
     # Adversarial training
     print('#####################################################')
@@ -374,16 +373,19 @@ if __name__ == '__main__':
         adversarial_train(generator, discriminator, rollout, 
             pg_loss, nll_loss, gen_optimizer, dis_optimizer, 
             dis_adversarial_train_loss, dis_adversarial_train_acc, args)
-        generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
-        gen_eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
-        dis_eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
-        gen_loss = eval_generator(target_lstm, gen_eval_iter, nll_loss, args)
-        gen_adversarial_eval_loss.append(gen_loss)
-        dis_loss, dis_acc = eval_discriminator(discriminator, dis_eval_iter, nll_loss, args)
-        dis_adversarial_eval_loss.append(dis_loss)
-        dis_adversarial_eval_acc.append(dis_acc)
-        print("gen eval loss: {:.5f}, dis eval loss: {:.5f}, dis eval acc: {:.3f}\n"
-            .format(gen_loss, dis_loss, dis_acc))
+
+        eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
+        eva_G(eva_data_iter, generator)
+        # generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
+        # gen_eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
+        # dis_eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
+        # gen_loss = eval_generator(target_lstm, gen_eval_iter, nll_loss, args)
+        # gen_adversarial_eval_loss.append(gen_loss)
+        # dis_loss, dis_acc = eval_discriminator(discriminator, dis_eval_iter, nll_loss, args)
+        # dis_adversarial_eval_loss.append(dis_loss)
+        # dis_adversarial_eval_acc.append(dis_acc)
+        # print("gen eval loss: {:.5f}, dis eval loss: {:.5f}, dis eval acc: {:.3f}\n"
+        #     .format(gen_loss, dis_loss, dis_acc))
 
     # Save experiment data
     # with open(args.data_path + 'experiment.pkl', 'wb') as f:
