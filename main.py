@@ -42,7 +42,7 @@ parser.add_argument('--vocab_size', type=int, default=24, metavar='N',
                     help='vocabulary size (default: 10)')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='batch size (default: 64)')
-parser.add_argument('--n_samples', type=int, default=38000, metavar='N',
+parser.add_argument('--n_samples', type=int, default=6400, metavar='N',
                     help='number of samples gerenated per time (default: 6400)')
 parser.add_argument('--gen_lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate of generator optimizer (default: 1e-3)')
@@ -56,7 +56,9 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
 
 # Files
 POSITIVE_FILE = 'transformed_real_data.txt'
+# POSITIVE_FILE = 'real.data'
 NEGATIVE_FILE = 'gene.data'
+groundtruth_file = "groundtruth.txt"
 
 
 # Genrator Parameters
@@ -84,13 +86,15 @@ def generate_samples(model, batch_size, generated_num, output_file):
             fout.write('{}\n'.format(string))
 
 
-def train_generator_MLE(gen, data_iter, criterion, optimizer, epochs, 
+def train_generator_MLE(gen, data_iter, eva_iter, criterion, optimizer, epochs, 
         gen_pretrain_train_loss, args):
     """
     Train generator with MLE
     """
+    show_every = 100
     for epoch in range(epochs):
         total_loss = 0.
+        count = 0
         for data, target in data_iter:
             if args.cuda:
                 data, target = data.cuda(), target.cuda()
@@ -101,10 +105,30 @@ def train_generator_MLE(gen, data_iter, criterion, optimizer, epochs,
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            if count % show_every == 0 and count != 0:
+                avg_loss = total_loss / 100
+                print("iteration {}, train loss: {:.5f}".format(count+epoch*len(data_iter), avg_loss))
+                total_loss = 0
+            count += 1
         data_iter.reset()
-    avg_loss = total_loss / len(data_iter)
-    print("Epoch {}, train loss: {:.5f}".format(epoch, avg_loss))
-    gen_pretrain_train_loss.append(avg_loss)
+
+        top1 = 0
+        total_num = 0
+        for eva_data, eva_target in eva_iter:
+            if args.cuda:
+                eva_data, eva_target = eva_data.cuda(), eva_target.cuda()
+            eva_target = eva_target.contiguous().view(-1)
+            eva_output = gen(eva_data)
+            _,maxk = torch.topk(eva_output, 1, dim=-1)
+            maxk = maxk[:,0]
+            top1 += (eva_target == maxk).sum().float()
+            total_num += eva_target.shape[0]
+        eva_iter.reset()
+        print("eva acc: {:.5f}".format(top1/total_num))
+
+
+
+    
 
 
 def train_generator_PG(gen, dis, rollout, pg_loss, optimizer, epochs, args):
@@ -265,9 +289,9 @@ if __name__ == '__main__':
     dis_adversarial_eval_acc = []
 
     # Generate toy data using target LSTM
-    print('#####################################################')
-    print('Generating data ...')
-    print('#####################################################\n\n')
+    # print('#####################################################')
+    # print('Generating data ...')
+    # print('#####################################################\n\n')
     # generate_samples(target_lstm, args.batch_size, args.n_samples, POSITIVE_FILE)
 
     # Pre-train generator using MLE
@@ -275,16 +299,19 @@ if __name__ == '__main__':
     print('Start pre-training generator with MLE...')
     print('#####################################################\n')
     gen_data_iter = GenDataIter(POSITIVE_FILE, args.batch_size)
+    eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
     for i in range(args.g_pretrain_steps):
         print("G-Step {}".format(i))
-        train_generator_MLE(generator, gen_data_iter, nll_loss, 
+        train_generator_MLE(generator, gen_data_iter, eva_data_iter, nll_loss, 
             gen_optimizer, args.gk_epochs, gen_pretrain_train_loss, args)
-        generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
-        eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
-        gen_loss = eval_generator(target_lstm, eval_iter, nll_loss, args)
-        gen_pretrain_eval_loss.append(gen_loss)
-        print("eval loss: {:.5f}\n".format(gen_loss))
+        # generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
+        # eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
+        # gen_loss = eval_generator(target_lstm, eval_iter, nll_loss, args)
+        # gen_pretrain_eval_loss.append(gen_loss)
+        # print("eval loss: {:.5f}\n".format(gen_loss))
     print('#####################################################\n\n')
+
+    os._exit(0)
 
     # Pre-train discriminator
     print('#####################################################')
@@ -324,19 +351,19 @@ if __name__ == '__main__':
             .format(gen_loss, dis_loss, dis_acc))
 
     # Save experiment data
-    with open(args.data_path + 'experiment.pkl', 'wb') as f:
-        pkl.dump(
-            (gen_pretrain_train_loss,
-                gen_pretrain_eval_loss,
-                dis_pretrain_train_loss,
-                dis_pretrain_train_acc,
-                dis_pretrain_eval_loss,
-                dis_pretrain_eval_acc,
-                gen_adversarial_eval_loss,
-                dis_adversarial_train_loss,
-                dis_adversarial_train_acc,
-                dis_adversarial_eval_loss,
-                dis_adversarial_eval_acc),
-            f,
-            protocol=pkl.HIGHEST_PROTOCOL
-        )
+    # with open(args.data_path + 'experiment.pkl', 'wb') as f:
+    #     pkl.dump(
+    #         (gen_pretrain_train_loss,
+    #             gen_pretrain_eval_loss,
+    #             dis_pretrain_train_loss,
+    #             dis_pretrain_train_acc,
+    #             dis_pretrain_eval_loss,
+    #             dis_pretrain_eval_acc,
+    #             gen_adversarial_eval_loss,
+    #             dis_adversarial_train_loss,
+    #             dis_adversarial_train_acc,
+    #             dis_adversarial_eval_loss,
+    #             dis_adversarial_eval_acc),
+    #         f,
+    #         protocol=pkl.HIGHEST_PROTOCOL
+    #     )
