@@ -38,7 +38,7 @@ parser.add_argument('--update_rate', type=float, default=0.8, metavar='UR',
                     help='update rate of roll-out model (default: 0.8)')
 parser.add_argument('--n_rollout', type=int, default=16, metavar='N',
                     help='number of roll-out (default: 16)')
-parser.add_argument('--vocab_size', type=int, default=10, metavar='N',
+parser.add_argument('--vocab_size', type=int, default=24, metavar='N',
                     help='vocabulary size (default: 10)')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='batch size (default: 64)')
@@ -55,14 +55,14 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
 
 
 # Files
-POSITIVE_FILE = 'real.data'
+POSITIVE_FILE = 'transformed_real_data.txt'
 NEGATIVE_FILE = 'gene.data'
 
 
 # Genrator Parameters
-g_embed_dim = 32
-g_hidden_dim = 32
-g_seq_len = 20
+g_embed_dim = 64
+g_hidden_dim = 64
+g_seq_len = 32
 
 
 # Discriminator Parameters
