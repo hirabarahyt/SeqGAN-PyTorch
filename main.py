@@ -42,7 +42,7 @@ parser.add_argument('--vocab_size', type=int, default=24, metavar='N',
                     help='vocabulary size (default: 10)')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='batch size (default: 64)')
-parser.add_argument('--n_samples', type=int, default=6400, metavar='N',
+parser.add_argument('--n_samples', type=int, default=38000, metavar='N',
                     help='number of samples gerenated per time (default: 6400)')
 parser.add_argument('--gen_lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate of generator optimizer (default: 1e-3)')
@@ -268,7 +268,7 @@ if __name__ == '__main__':
     print('#####################################################')
     print('Generating data ...')
     print('#####################################################\n\n')
-    generate_samples(target_lstm, args.batch_size, args.n_samples, POSITIVE_FILE)
+    # generate_samples(target_lstm, args.batch_size, args.n_samples, POSITIVE_FILE)
 
     # Pre-train generator using MLE
     print('#####################################################')
