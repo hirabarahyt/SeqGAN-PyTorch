@@ -12,7 +12,7 @@ from discriminator import Discriminator
 from target_lstm import TargetLSTM
 from rollout import Rollout
 from loss import PGLoss
-
+import random
 
 # Arguemnts
 parser = argparse.ArgumentParser(description='SeqGAN')
@@ -22,7 +22,7 @@ parser.add_argument('--data_path', type=str, default='/scratch/zc807/seq_gan/', 
                     help='data path to save files (default: /scratch/zc807/seq_gan/)')
 parser.add_argument('--rounds', type=int, default=150, metavar='N',
                     help='rounds of adversarial training (default: 150)')
-parser.add_argument('--g_pretrain_steps', type=int, default=120, metavar='N',
+parser.add_argument('--g_pretrain_steps', type=int, default=5, metavar='N',
                     help='steps of pre-training of generators (default: 120)')
 parser.add_argument('--d_pretrain_steps', type=int, default=50, metavar='N',
                     help='steps of pre-training of discriminators (default: 50)')
@@ -42,7 +42,7 @@ parser.add_argument('--vocab_size', type=int, default=24, metavar='N',
                     help='vocabulary size (default: 10)')
 parser.add_argument('--batch_size', type=int, default=64, metavar='N',
                     help='batch size (default: 64)')
-parser.add_argument('--n_samples', type=int, default=6400, metavar='N',
+parser.add_argument('--n_samples', type=int, default=64000, metavar='N',
                     help='number of samples gerenated per time (default: 6400)')
 parser.add_argument('--gen_lr', type=float, default=1e-3, metavar='LR',
                     help='learning rate of generator optimizer (default: 1e-3)')
@@ -59,6 +59,7 @@ POSITIVE_FILE = 'transformed_real_data.txt'
 # POSITIVE_FILE = 'real.data'
 NEGATIVE_FILE = 'gene.data'
 groundtruth_file = "groundtruth.txt"
+sample_positive_file = "sampled_real.txt"
 
 
 # Genrator Parameters
@@ -73,6 +74,36 @@ d_embed_dim = 64
 d_filter_sizes = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 15, 20]
 d_num_filters = [100, 200, 200, 200, 200, 100, 100, 100, 100, 100, 160, 160]
 d_dropout_prob = 0.2
+
+def sample_real(real_file, out_file):
+    oup = open(out_file, 'w')
+    random_idx = random.randint(0,850000)
+    end = random_idx + 64000
+    with open(real_file, 'r') as f:
+        n = 0
+        for line in f:
+            n += 1
+            if n < random_idx:
+                continue
+            if n > end:
+                continue
+            oup.write(line)
+    oup.close()
+
+def eva_G(eva_iter, gen):
+    top1 = 0
+    total_num = 0
+    for eva_data, eva_target in eva_iter:
+        if args.cuda:
+            eva_data, eva_target = eva_data.cuda(), eva_target.cuda()
+        eva_target = eva_target.contiguous().view(-1)
+        eva_output = gen(eva_data)
+        _,maxk = torch.topk(eva_output, 1, dim=-1)
+        maxk = maxk[:,0]
+        top1 += (eva_target == maxk).sum().float()
+        total_num += eva_target.shape[0]
+    eva_iter.reset()
+    print("eva acc: {:.5f}".format(top1/total_num))
 
 
 def generate_samples(model, batch_size, generated_num, output_file):
@@ -112,19 +143,20 @@ def train_generator_MLE(gen, data_iter, eva_iter, criterion, optimizer, epochs,
             count += 1
         data_iter.reset()
 
-        top1 = 0
-        total_num = 0
-        for eva_data, eva_target in eva_iter:
-            if args.cuda:
-                eva_data, eva_target = eva_data.cuda(), eva_target.cuda()
-            eva_target = eva_target.contiguous().view(-1)
-            eva_output = gen(eva_data)
-            _,maxk = torch.topk(eva_output, 1, dim=-1)
-            maxk = maxk[:,0]
-            top1 += (eva_target == maxk).sum().float()
-            total_num += eva_target.shape[0]
-        eva_iter.reset()
-        print("eva acc: {:.5f}".format(top1/total_num))
+        eva_G(eva_iter, gen)
+        # top1 = 0
+        # total_num = 0
+        # for eva_data, eva_target in eva_iter:
+        #     if args.cuda:
+        #         eva_data, eva_target = eva_data.cuda(), eva_target.cuda()
+        #     eva_target = eva_target.contiguous().view(-1)
+        #     eva_output = gen(eva_data)
+        #     _,maxk = torch.topk(eva_output, 1, dim=-1)
+        #     maxk = maxk[:,0]
+        #     top1 += (eva_target == maxk).sum().float()
+        #     total_num += eva_target.shape[0]
+        # eva_iter.reset()
+        # print("eva acc: {:.5f}".format(top1/total_num))
 
 
 
@@ -180,7 +212,9 @@ def train_discriminator(dis, gen, criterion, optimizer, epochs,
     Train discriminator
     """
     generate_samples(gen, args.batch_size, args.n_samples, NEGATIVE_FILE)
-    data_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
+    # data_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
+    sample_real(POSITIVE_FILE, sample_positive_file)
+    data_iter = DisDataIter(sample_positive_file, NEGATIVE_FILE, args.batch_size)
     for epoch in range(epochs):
         correct = 0
         total_loss = 0.
@@ -288,7 +322,7 @@ if __name__ == '__main__':
     dis_adversarial_eval_loss = []
     dis_adversarial_eval_acc = []
 
-    # Generate toy data using target LSTM
+    #Generate toy data using target LSTM
     # print('#####################################################')
     # print('Generating data ...')
     # print('#####################################################\n\n')
@@ -311,8 +345,6 @@ if __name__ == '__main__':
         # print("eval loss: {:.5f}\n".format(gen_loss))
     print('#####################################################\n\n')
 
-    os._exit(0)
-
     # Pre-train discriminator
     print('#####################################################')
     print('Start pre-training discriminator...')
@@ -322,12 +354,15 @@ if __name__ == '__main__':
         train_discriminator(discriminator, generator, nll_loss, 
             dis_optimizer, args.dk_epochs, dis_adversarial_train_loss, dis_adversarial_train_acc, args)
         generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
-        eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
+        sample_real(POSITIVE_FILE, sample_positive_file)
+        eval_iter = DisDataIter(sample_positive_file, NEGATIVE_FILE, args.batch_size)
+        # eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
         dis_loss, dis_acc = eval_discriminator(discriminator, eval_iter, nll_loss, args)
         dis_pretrain_eval_loss.append(dis_loss)
         dis_pretrain_eval_acc.append(dis_acc)
         print("eval loss: {:.5f}, eval acc: {:.3f}\n".format(dis_loss, dis_acc))
     print('#####################################################\n\n')
+    os._exit(0)
 
     # Adversarial training
     print('#####################################################')
