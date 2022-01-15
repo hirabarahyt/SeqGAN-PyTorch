@@ -376,6 +376,8 @@ if __name__ == '__main__':
 
         eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
         eva_G(eva_data_iter, generator)
+        torch.save(generator.state_dict(),"checkpoints/ckG_{}.pth".format(i))
+        torch.save(discriminator.state_dict(),"checkpoints/ckD_{}.pth".format(i))
         # generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
         # gen_eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
         # dis_eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
