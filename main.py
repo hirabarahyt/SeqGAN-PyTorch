@@ -54,6 +54,8 @@ parser.add_argument('--seed', type=int, default=1, metavar='S',
                     help='random seed (default: 1)')
 
 
+pre_train = False
+
 # Files
 POSITIVE_FILE = 'transformed_real_data.txt'
 # POSITIVE_FILE = 'real.data'
@@ -280,6 +282,19 @@ def adversarial_train(gen, dis, rollout, pg_loss, nll_loss, gen_optimizer, dis_o
     # update roll-out model
     rollout.update_params()
 
+def load_weight(model, weight_path, eva=False):
+    if torch.cuda.is_available():
+        para = torch.load(weight_path)
+        # para = torch.load(weight_path, map_location={'cuda:2':'cuda:0'})
+    else:
+        para = torch.load(weight_path, map_location='cpu')
+    model.load_state_dict(para)
+    if torch.cuda.is_available():
+        model.cuda()
+    if eva:
+        model.eval()
+    return model
+
 
 if __name__ == '__main__':
     # Parse arguments
@@ -328,42 +343,50 @@ if __name__ == '__main__':
     # print('#####################################################\n\n')
     # generate_samples(target_lstm, args.batch_size, args.n_samples, POSITIVE_FILE)
 
-    # Pre-train generator using MLE
-    print('#####################################################')
-    print('Start pre-training generator with MLE...')
-    print('#####################################################\n')
-    gen_data_iter = GenDataIter(POSITIVE_FILE, args.batch_size)
-    eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
-    for i in range(args.g_pretrain_steps):
-        print("G-Step {}".format(i))
-        train_generator_MLE(generator, gen_data_iter, eva_data_iter, nll_loss, 
-            gen_optimizer, args.gk_epochs, gen_pretrain_train_loss, args)
-        # generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
-        # eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
-        # gen_loss = eval_generator(target_lstm, eval_iter, nll_loss, args)
-        # gen_pretrain_eval_loss.append(gen_loss)
-        # print("eval loss: {:.5f}\n".format(gen_loss))
-    torch.save(generator.state_dict(),"checkpoints/preG.pth".format(i))
-    print('#####################################################\n\n')
+    if pre_train:
+        # Pre-train generator using MLE
+        print('#####################################################')
+        print('Start pre-training generator with MLE...')
+        print('#####################################################\n')
+        gen_data_iter = GenDataIter(POSITIVE_FILE, args.batch_size)
+        eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
+        for i in range(args.g_pretrain_steps):
+            print("G-Step {}".format(i))
+            train_generator_MLE(generator, gen_data_iter, eva_data_iter, nll_loss, 
+                gen_optimizer, args.gk_epochs, gen_pretrain_train_loss, args)
+            # generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
+            # eval_iter = GenDataIter(NEGATIVE_FILE, args.batch_size)
+            # gen_loss = eval_generator(target_lstm, eval_iter, nll_loss, args)
+            # gen_pretrain_eval_loss.append(gen_loss)
+            # print("eval loss: {:.5f}\n".format(gen_loss))
+        torch.save(generator.state_dict(),"checkpoints/preG.pth".format(i))
+        print('#####################################################\n\n')
 
-    # Pre-train discriminator
-    print('#####################################################')
-    print('Start pre-training discriminator...')
-    print('#####################################################\n')
-    for i in range(args.d_pretrain_steps):
-        print("D-Step {}".format(i))
-        train_discriminator(discriminator, generator, nll_loss, 
-            dis_optimizer, args.dk_epochs, dis_adversarial_train_loss, dis_adversarial_train_acc, args)
-        generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
-        sample_real(POSITIVE_FILE, sample_positive_file)
-        eval_iter = DisDataIter(sample_positive_file, NEGATIVE_FILE, args.batch_size)
-        # eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
-        dis_loss, dis_acc = eval_discriminator(discriminator, eval_iter, nll_loss, args)
-        dis_pretrain_eval_loss.append(dis_loss)
-        dis_pretrain_eval_acc.append(dis_acc)
-        print("eval loss: {:.5f}, eval acc: {:.3f}\n".format(dis_loss, dis_acc))
-    torch.save(discriminator.state_dict(),"checkpoints/preD.pth".format(i))
-    print('#####################################################\n\n')
+        # Pre-train discriminator
+        print('#####################################################')
+        print('Start pre-training discriminator...')
+        print('#####################################################\n')
+        for i in range(args.d_pretrain_steps):
+            print("D-Step {}".format(i))
+            train_discriminator(discriminator, generator, nll_loss, 
+                dis_optimizer, args.dk_epochs, dis_adversarial_train_loss, dis_adversarial_train_acc, args)
+            generate_samples(generator, args.batch_size, args.n_samples, NEGATIVE_FILE)
+            sample_real(POSITIVE_FILE, sample_positive_file)
+            eval_iter = DisDataIter(sample_positive_file, NEGATIVE_FILE, args.batch_size)
+            # eval_iter = DisDataIter(POSITIVE_FILE, NEGATIVE_FILE, args.batch_size)
+            dis_loss, dis_acc = eval_discriminator(discriminator, eval_iter, nll_loss, args)
+            dis_pretrain_eval_loss.append(dis_loss)
+            dis_pretrain_eval_acc.append(dis_acc)
+            print("eval loss: {:.5f}, eval acc: {:.3f}\n".format(dis_loss, dis_acc))
+        torch.save(discriminator.state_dict(),"checkpoints/preD.pth".format(i))
+        print('#####################################################\n\n')
+
+    else:
+        generator = load_weight(generator, "checkpoints/preG.pth")
+        discriminator = load_weight(discriminator, "checkpoints/preD.pth")
+
+    eva_data_iter = GenDataIter(groundtruth_file, args.batch_size)
+    eva_G(eva_data_iter, generator)
 
     # Adversarial training
     print('#####################################################')
