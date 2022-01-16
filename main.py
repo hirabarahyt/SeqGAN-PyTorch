@@ -343,6 +343,7 @@ if __name__ == '__main__':
         # gen_loss = eval_generator(target_lstm, eval_iter, nll_loss, args)
         # gen_pretrain_eval_loss.append(gen_loss)
         # print("eval loss: {:.5f}\n".format(gen_loss))
+    torch.save(generator.state_dict(),"checkpoints/preG.pth".format(i))
     print('#####################################################\n\n')
 
     # Pre-train discriminator
@@ -361,6 +362,7 @@ if __name__ == '__main__':
         dis_pretrain_eval_loss.append(dis_loss)
         dis_pretrain_eval_acc.append(dis_acc)
         print("eval loss: {:.5f}, eval acc: {:.3f}\n".format(dis_loss, dis_acc))
+    torch.save(discriminator.state_dict(),"checkpoints/preD.pth".format(i))
     print('#####################################################\n\n')
 
     # Adversarial training
